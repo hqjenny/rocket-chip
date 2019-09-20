@@ -147,6 +147,9 @@ class HellaCachePerfEvents extends Bundle {
   val canAcceptLoadThenLoad = Bool()
   val storeBufferEmptyAfterLoad = Bool()
   val storeBufferEmptyAfterStore = Bool()
+  val acquireT = Bool()
+  val releaseData = Bool()
+  val probeAckData = Bool()
 }
 
 // interface between D$ and processor/DTLB
@@ -205,6 +208,7 @@ class HellaCacheBundle(val outer: HellaCache)(implicit p: Parameters) extends Co
   val cpu = (new HellaCacheIO).flip
   val ptw = new TLBPTWIO()
   val errors = new DCacheErrors
+  val nWbInhibit = Bool(INPUT)
 }
 
 class HellaCacheModule(outer: HellaCache) extends LazyModuleImp(outer)

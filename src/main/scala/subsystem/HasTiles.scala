@@ -9,9 +9,16 @@ import freechips.rocketchip.devices.debug.TLDebugModule
 import freechips.rocketchip.devices.tilelink.{BasicBusBlocker, BasicBusBlockerParams, CLINT, CLINTConsts, TLPLIC, PLICKey}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
-import freechips.rocketchip.tile.{BaseTile, LookupByHartId, LookupByHartIdImpl, TileParams, HasExternallyDrivenTileConstants}
+import freechips.rocketchip.tile.{BaseTile, LookupByHartId, LookupByHartIdImpl, TileParams, HasExternallyDrivenTileConstants, TilePerfInputs, TileVisibilityNodeKey}
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
+
+class ClockedTileInputs(implicit val p: Parameters) extends ParameterizedBundle
+  with HasExternallyDrivenTileConstants
+  with Clocked {
+    val nWbInhibit = Bool(INPUT)
+    val perf = new TilePerfInputs
+}
 
 trait HasTiles extends HasCoreMonitorBundles { this: BaseSubsystem =>
   implicit val p: Parameters
@@ -20,6 +27,7 @@ trait HasTiles extends HasCoreMonitorBundles { this: BaseSubsystem =>
   def nTiles: Int = tileParams.size
   def hartIdList: Seq[Int] = tileParams.map(_.hartId)
   def localIntCounts: Seq[Int] = tileParams.map(_.core.nLocalInterrupts)
+  def sharedMemoryTLEdge = sbus.busView
 
   // define some nodes that are useful for collecting or driving tile interrupts
   val meipNode = p(PLICKey) match {
@@ -134,11 +142,30 @@ trait HasTilesModuleImp extends LazyModuleImp {
   }
 
   val tile_inputs = outer.tiles.map(_.module.constants)
+  //val tile_inputs = dontTouch(Wire(Vec(outer.nTiles, new ClockedTileInputs()(
+  //p.alterPartial {
+    //case SharedMemoryTLEdge => outer.sharedMemoryTLEdge
+    //case TileVisibilityNodeKey => outer.sharedMemoryTLEdge
+  //}
+  //)))) // dontTouch keeps constant prop from sucking these signals into the tile
+
 
   val meip = if(outer.meipNode.isDefined) Some(IO(Vec(outer.meipNode.get.out.size, Bool()).asInput)) else None
   meip.foreach { m =>
     m.zipWithIndex.foreach{ case (pin, i) =>
       (outer.meipNode.get.out(i)._1)(0) := pin
     }
+
+  // Unconditionally wire up the non-diplomatic tile inputs
+  outer.tiles.map(_.module).zip(tile_inputs).foreach { case(tile, wire) =>
+  //  tile.clock := wire.clock
+  //  tile.reset := wire.reset
+    tile.constants.hartid := wire.hartid
+    tile.constants.reset_vector := wire.reset_vector
+    tile.constants.nWbInhibit := wire.nWbInhibit
+    tile.constants.perf.blkdev_get := wire.perf.blkdev_get
+    tile.constants.perf.blkdev_put := wire.perf.blkdev_put
+  }
+
   }
 }
