@@ -60,6 +60,15 @@ trait HasTiles extends HasCoreMonitorBundles { this: BaseSubsystem =>
     }
   }
 
+  protected def connectMasterPortsToSBusBwReg(tile: BaseTile, crossing: RocketCrossingParams, bwReg: BwRegulator) {
+    sbus.fromTileBwReg(tile.tileParams.name, crossing.master.buffers) {
+      crossing.master.cork
+        .map { u => TLCacheCork(unsafe = u) }
+        .map { _ := bwReg.node :=* tile.crossMasterPort() }
+        .getOrElse { bwReg.node :=* tile.crossMasterPort() }
+    }
+  }
+
   protected def connectSlavePortsToCBus(tile: BaseTile, crossing: RocketCrossingParams)(implicit valName: ValName) {
 
     DisableMonitors { implicit p =>
